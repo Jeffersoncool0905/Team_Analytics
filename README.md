@@ -334,7 +334,7 @@ The foundation is fully built and verified in `fraud_detection.db`. Team members
    SELECT * FROM v_fraud_alert_queue WHERE triage_priority_rank <= 15;
    ```
 
-   # 🤖 Phase 3: Machine Learning Model Benchmarking & Fraud Risk Scoring
+  # 🤖 Phase 3: Machine Learning Model Benchmarking & Fraud Risk Scoring
 ### Supervised Classification, Class Imbalance Engineering, Hyperparameter Tuning & Power BI Scoring Pipeline
 
 ![Python](https://img.shields.io/badge/Language-Python%203.11-blue?style=for-the-badge&logo=python)
@@ -374,7 +374,12 @@ ml_models/
 ├── 04_key_metrics_bars.png                <-- F1, Recall, PR-AUC & R² Bar Charts
 ├── 05_confusion_matrices.png              <-- Confusion Matrices (All 7 Models)
 ├── 06_feature_importance.png              <-- Top Fraud-Driving Features
-└── 07_composite_ranking.png               <-- Weighted Composite Score Ranking
+├── 07_composite_ranking.png               <-- Weighted Composite Score Ranking
+├── 01_xgboost_pr_curve.png                <-- Tuned XGBoost Precision-Recall Curve
+├── 02_xgboost_classification_scores.png     <-- Tuned XGBoost Classification Metrics
+├── 03_xgboost_confusion_matrix.png          <-- Tuned XGBoost Confusion Matrix
+├── 04_xgboost_probability_fit_metrics.png   <-- Tuned XGBoost R², MAE & RMSE
+└── powerbi_risk_summary.png               <-- Power BI Scored Risk Tier & Exposure Summary
 ```
 
 ---
@@ -446,12 +451,20 @@ Tuned **Gradient Boosting** (with `SMOTE` inside `imblearn.pipeline.Pipeline`) a
 
 **Selected Production Model:** **Tuned XGBoost** (`n_estimators=300`, `max_depth=6`, `learning_rate=0.03`, `subsample=1.0`, `colsample_bytree=1.0`, `reg_alpha=0`, `reg_lambda=1.0`) — chosen for highest Accuracy (`99.85%`), F1 (`0.9774`), $R^2$ (`0.9621`), and lowest error (`MAE = 0.0018`, `Brier = 0.0012`), plus fast inference without requiring SMOTE at training time.
 
+#### Tuned XGBoost Evaluation Visuals:
+![Tuned XGBoost Precision-Recall Curve](01_xgboost_pr_curve.png)
+![Tuned XGBoost Classification Metrics](02_xgboost_classification_scores.png)
+![Tuned XGBoost Confusion Matrix](03_xgboost_confusion_matrix.png)
+![Tuned XGBoost Probability Fit Metrics](04_xgboost_probability_fit_metrics.png)
+
 ### 3. Power BI Scoring Export (`powerbi_fraud_predictions.csv`)
 The final notebook scores all `10,000` transactions and merges predictions with `clean_transactions` for **Phase 4 (Power BI Command Center)**:
 * `fraud_probability_score` (`0.0000` → `1.0000`)
 * `predicted_fraud` (`0` / `1`)
 * `fraud_risk_tier` (`Low Risk`, `Medium Risk`, `High Risk`, `Critical Risk`)
 * `investigation_status` (`Pending` for `High Risk` / `Critical Risk`; `Auto-Cleared` otherwise)
+
+![Power BI Scored Risk Tier & Exposure Summary](powerbi_risk_summary.png)
 
 ---
 
