@@ -33,6 +33,7 @@ The database was engineered in **SQLite 3** via **DBeaver Community** using a mu
 flowchart TD
     A["Raw Ingestion<br><code>data/transactions_raw.csv</code>"] -->|CSV Import| B["Staging Table<br><code>stg_transactions_raw</code><br>(Flexible TEXT Types)"]
     B -->|Sanitize, Cast & Feature Engineer| C["Production Table<br><code>clean_transactions</code><br>(Strict Types, Primary Key, Indices)"]
+    C -->|Export Clean CSV| G["Clean Production CSV<br><code>data/transactions_clean.csv</code><br>(23 Columns, Model-Ready)"]
     C -->|Window Functions: LAG & Speed| D["Analytics Query<br><code>Impossible Travel</code><br>(Velocity > 800 km/h)"]
     C -->|Groupings & Aggregations| E["Behavioral Analytics<br><code>Ticket Size & Diurnal Hour</code>"]
     C -->|DENSE_RANK Partitioning| F["Production View<br><code>v_fraud_alert_queue</code><br>(Real-Time Priority Triage)"]
@@ -48,7 +49,8 @@ Financial_Fraud_Early_Detection/
 ├── .gitignore                              <-- Git configuration
 ├── fraud_detection.db                      <-- Production SQLite Database (10,000 Clean Rows + View)
 ├── data/
-│   └── transactions_raw.csv                <-- Raw transactional dataset (10,000 records)
+│   ├── transactions_raw.csv                <-- Raw transactional dataset (10,000 records, 19 columns)
+│   └── transactions_clean.csv              <-- Clean Production Dataset (10,000 records, 23 columns)
 ├── sql/
 │   ├── 01_staging_and_cleaning.sql         <-- Staging schema, production table & ETL pipeline
 │   ├── 02_data_audits_and_eda.sql          <-- Completeness audits, null profiles & category EDA
@@ -163,6 +165,12 @@ SELECT
     END                                                     AS ticket_size_bracket
 FROM stg_transactions_raw;
 ```
+
+### 4. Clean Production CSV Export (`data/transactions_clean.csv`)
+For team collaborators working directly in **Excel**, **Python / Scikit-Learn**, or **Power BI / Tableau** who need immediate flat file access without connecting to the SQLite instance, the production table has been exported directly to `data/transactions_clean.csv`:
+* **Row Count:** 10,000 clean records
+* **Total Columns:** 23 (19 sanitized core columns + 4 engineered attributes: `trans_date`, `trans_hour`, `trans_day_of_week`, `ticket_size_bracket`)
+* **Integrity:** Zero missing/null values, pre-formatted and ready for modeling.
 
 ---
 
