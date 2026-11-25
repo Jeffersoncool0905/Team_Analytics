@@ -333,3 +333,137 @@ The foundation is fully built and verified in `fraud_detection.db`. Team members
    ```sql
    SELECT * FROM v_fraud_alert_queue WHERE triage_priority_rank <= 15;
    ```
+
+   # 🤖 Phase 3: Machine Learning Model Benchmarking & Fraud Risk Scoring
+### Supervised Classification, Class Imbalance Engineering, Hyperparameter Tuning & Power BI Scoring Pipeline
+
+![Python](https://img.shields.io/badge/Language-Python%203.11-blue?style=for-the-badge&logo=python)
+![Scikit-Learn](https://img.shields.io/badge/Library-Scikit--Learn%20%7C%20XGBoost-orange?style=for-the-badge&logo=scikitlearn)
+![Status](https://img.shields.io/badge/Status-Model%20Training%20%26%20Benchmark%20Completed-success?style=for-the-badge)
+![Team Project](https://img.shields.io/badge/Phase-3%20Machine%20Learning-purple?style=for-the-badge)
+
+---
+
+## 📌 Executive Summary
+
+Building directly on the SQL-cleaned production table (`clean_transactions` in `fraud_detection.db`), this module executes two core ML workflows:
+1. **7-Model Benchmarking (`train_fraud_model.py`):** Evaluates 7 supervised classifiers against standard baselines across classification and probability-fit metrics (`Accuracy`, `Precision`, `Recall`, `F1`, `ROC-AUC`, `PR-AUC`, `R²`, `MAPE`, `MAE`, `Brier`).
+2. **Hypertuned Production Training & Power BI Export (`prepare_hypertuned_db.py` + `Project_1_Python_Model_Training.ipynb`):** Engineers a leak-free, indexed ML database (`fraud_detection_hypertuned.db`), tunes **XGBoost** and **Gradient Boosting** via `RandomizedSearchCV` (`StratifiedKFold`, 5 folds), and selects **Tuned XGBoost** as the final production model for **Power BI** risk scoring.
+
+### Key ML Highlights:
+* **Severe Class Imbalance Handled:** **3.33%** fraud rate (`333` fraud / `9,667` normal) addressed via **SMOTE** (for Scikit-Learn estimators) and native **`scale_pos_weight = 29.08`** (for XGBoost).
+* **Primary Optimization Metric:** **PR-AUC (`average_precision`)** prioritized over raw accuracy to prevent majority-class bias.
+* **Top Benchmark Performers:** **Gradient Boosting (SMOTE)** (`Composite = 0.9962`, `R² = 0.9828`, `Recall = 100%`) and **XGBoost** (`Composite = 0.9932`, `PR-AUC = 0.9986`, `Precision = 100%`).
+* **Final Selected Production Model (Colab Tuned):** **Tuned XGBoost** (`Accuracy = 99.85%`, `F1 = 0.9774`, `Recall = 97.01%`, `Precision = 98.48%`, `R² = 0.9621`, `Brier = 0.0012`) — outperforming the 50/50 `GB + XGB` ensemble on almost every metric.
+
+---
+
+## 📁 Module Structure (`ml_models/`)
+
+```text
+ml_models/
+├── README.md                              <-- Phase 3 ML Documentation (Model Comparison & Training)
+├── train_fraud_model.py                   <-- 7-Model Benchmark & Visualization Pipeline
+├── prepare_hypertuned_db.py               <-- ML Feature Engineering & SQLite Optimization Script
+├── Project_1_Python_Model_Training.ipynb  <-- Google Colab Hypertuning, Evaluation & Power BI Export
+├── benchmark_results.json                 <-- Full JSON metrics & 5-fold CV results
+├── scored_transactions.csv                <-- Full 10,000-row benchmark scored export
+├── 01_metrics_heatmap.png                 <-- 7-Model Metrics Comparison Heatmap
+├── 02_roc_curves.png                      <-- ROC Curves (All 7 Models)
+├── 03_precision_recall_curves.png         <-- Precision-Recall Curves (All 7 Models)
+├── 04_key_metrics_bars.png                <-- F1, Recall, PR-AUC & R² Bar Charts
+├── 05_confusion_matrices.png              <-- Confusion Matrices (All 7 Models)
+├── 06_feature_importance.png              <-- Top Fraud-Driving Features
+└── 07_composite_ranking.png               <-- Weighted Composite Score Ranking
+```
+
+---
+
+## 📊 Part 1: 7-Model Comparison & Benchmark (`train_fraud_model.py`)
+
+### 1. Experimental Setup
+* **Source Data:** `clean_transactions` (`10,000` rows, `0` NULLs) from `fraud_detection.db`.
+* **Features (13):** `transaction_amount`, `customer_avg_ticket`, `amount_to_avg_ratio`, `distance_km`, `trans_hour`, `trans_count_last_1h`, `is_foreign_transaction`, plus encoded `card_type`, `merchant_category`, `card_entry_mode`, `device_type`, `trans_day_of_week`, `ticket_size_bracket`.
+* **Split:** Stratified 80/20 (`8,000` train / `2,000` test with `67` fraud cases).
+* **Composite Ranking Formula:** `25% Recall + 25% PR-AUC + 20% F1 + 15% MCC + 10% ROC-AUC + 5% Precision`.
+
+### 2. Full Benchmark Results (2,000 Held-Out Test Samples)
+
+| Rank | Model | Imbalance Strategy | Accuracy | Precision | Recall | F1 | ROC-AUC | PR-AUC | $R^2$ (Proba) | MAPE ($y=1$) | MAE | Brier | Composite |
+| :---: | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **#1** | **Gradient Boosting** | SMOTE (`15,468` rows) | **0.9995** | 0.9853 | **1.0000** | **0.9926** | **0.9999** | 0.9981 | **0.9828** | **0.19%** | **0.0008** | **0.0006** | **0.9962** |
+| **#2** | **XGBoost** | `scale_pos_weight=29.1` | **0.9995** | **1.0000** | 0.9851 | 0.9925 | **0.9999** | **0.9986** | 0.9758 | 2.75% | 0.0018 | 0.0008 | 0.9932 |
+| **#3** | **Decision Tree** | `class_weight='balanced'` | 0.9985 | 0.9571 | **1.0000** | 0.9781 | 0.9994 | 0.9649 | 0.9558 | 1.30% | 0.0019 | 0.0014 | 0.9813 |
+| **#4** | **Random Forest** | SMOTE (`15,468` rows) | 0.9975 | 0.9559 | 0.9701 | 0.9630 | 0.9998 | 0.9933 | 0.9385 | 8.04% | 0.0051 | 0.0020 | 0.9755 |
+| **#5** | **LightGBM** | `is_unbalance=True` | 0.9975 | 0.9697 | 0.9552 | 0.9624 | **0.9999** | 0.9957 | 0.9384 | 5.33% | 0.0028 | 0.0020 | 0.9728 |
+| **#6** | **Balanced Random Forest** | Balanced Bootstrap | 0.9930 | 0.8442 | 0.9701 | 0.9028 | 0.9993 | 0.9826 | 0.8133 | 6.28% | 0.0181 | 0.0060 | 0.9461 |
+| **#7** | **Logistic Regression** | `class_weight='balanced'` | 0.9840 | 0.6768 | **1.0000** | 0.8072 | 0.9989 | 0.9725 | 0.6450 | 2.74% | 0.0207 | 0.0115 | 0.9107 |
+
+> 💡 **Note on Probability Metrics:** Because `is_fraud` is binary (`0/1`), standard MAPE divides by zero on non-fraud rows. `MAPE (y=1)` measures probability error on confirmed fraud cases alongside $R^2$, `MAE`, and `Brier Score` across all `2,000` test rows.
+
+### 3. 5-Fold Stratified Cross-Validation (Top 3 by PR-AUC)
+
+| Model | CV F1 (Mean ± Std) | CV ROC-AUC | CV Precision | CV Recall |
+| :--- | :---: | :---: | :---: | :---: |
+| **Gradient Boosting** | **0.9944 ± 0.0074** | **1.0000 ± 0.0000** | **0.9927** | **0.9962** |
+| **XGBoost** | 0.9741 ± 0.0131 | 0.9999 ± 0.0000 | 0.9678 | 0.9812 |
+| **LightGBM** | 0.9705 ± 0.0152 | 0.9999 ± 0.0001 | 0.9605 | 0.9812 |
+
+### 4. Benchmark Visualizations
+
+![Metrics Comparison Heatmap](01_metrics_heatmap.png)
+![Precision-Recall Curves](03_precision_recall_curves.png)
+![Confusion Matrices](05_confusion_matrices.png)
+![Composite Model Ranking](07_composite_ranking.png)
+
+---
+
+## 🚀 Part 2: Hypertuned Model Training & Power BI Pipeline
+
+### 1. ML-Ready Database Engineering (`fraud_detection_hypertuned.db`)
+Created via `prepare_hypertuned_db.py` on top of `fraud_detection.db` (`7.96 MB`, `0` NULLs across all `52` columns):
+
+* **B-Tree Indexing & Optimization:** Added 8 indexes across `clean_transactions` and `ml_features_transactions`, followed by `ANALYZE` and `VACUUM`.
+* **Engineered Features (`ml_features_transactions` — 10,000 × 52):**
+  * **Geospatial & Velocity (`LAG()`):** `is_country_change`, `hours_since_prev_txn`, `travel_speed_kmh`, `is_impossible_travel` (`13` rows > `800 km/h`), `cust_txn_seq_num`.
+  * **Temporal & Cyclical:** `hour_sin`, `hour_cos`, `is_night_owl_hour` (`12 AM–5 AM`), `is_weekend`.
+  * **Bimodal & Interactions:** `log_transaction_amount`, `log_distance_km`, `amt_diff_from_avg`, `is_micro_txn` (`<$25`), `is_high_luxury_txn` (`>=$500`), `is_cnp_online`, `foreign_x_cnp`, `ratio_x_velocity`.
+  * **One-Hot Encoded Categoricals:** Numeric `0/1` columns for `card_type`, `merchant_category`, `card_entry_mode`, `device_type`, and `ticket_size_bracket`.
+  * **Zero Leakage:** Excludes `fraud_scenario` and raw PII/identifiers from model inputs.
+* **Pre-Split SQL Views:**
+  * `v_ml_train`: `8,000` rows (`266` fraud, `3.33%`)
+  * `v_ml_test`: `2,000` rows (`67` fraud, `3.35%`)
+
+### 2. Hyperparameter Tuning & Final Model Selection (`Project_1_Python_Model_Training.ipynb`)
+Tuned **Gradient Boosting** (with `SMOTE` inside `imblearn.pipeline.Pipeline`) and **XGBoost** (`scale_pos_weight = 29.08`) using `RandomizedSearchCV` (`StratifiedKFold`, 5 folds, `scoring='average_precision'`):
+
+| Model | Accuracy | Precision | Recall | F1 | ROC-AUC | PR-AUC | $R^2$ (Proba) | MAE | Brier |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **XGBoost (Tuned)** ★ | **0.9985** | **0.9848** | 0.9701 | **0.9774** | 0.9997 | 0.9948 | **0.9621** | **0.0018** | **0.0012** |
+| **Ensemble (50% GB + 50% XGB)** | 0.9980 | 0.9846 | 0.9552 | 0.9697 | **0.9999** | 0.9977 | 0.9562 | 0.0021 | 0.0014 |
+| **Gradient Boosting (Tuned + SMOTE)** | 0.9975 | 0.9844 | 0.9403 | 0.9618 | **0.9999** | **0.9985** | 0.9390 | 0.0023 | 0.0020 |
+| **Logistic Regression (Baseline)** | 0.9970 | 0.9296 | **0.9851** | 0.9565 | **0.9999** | 0.9964 | 0.9326 | 0.0036 | 0.0022 |
+
+**Selected Production Model:** **Tuned XGBoost** (`n_estimators=300`, `max_depth=6`, `learning_rate=0.03`, `subsample=1.0`, `colsample_bytree=1.0`, `reg_alpha=0`, `reg_lambda=1.0`) — chosen for highest Accuracy (`99.85%`), F1 (`0.9774`), $R^2$ (`0.9621`), and lowest error (`MAE = 0.0018`, `Brier = 0.0012`), plus fast inference without requiring SMOTE at training time.
+
+### 3. Power BI Scoring Export (`powerbi_fraud_predictions.csv`)
+The final notebook scores all `10,000` transactions and merges predictions with `clean_transactions` for **Phase 4 (Power BI Command Center)**:
+* `fraud_probability_score` (`0.0000` → `1.0000`)
+* `predicted_fraud` (`0` / `1`)
+* `fraud_risk_tier` (`Low Risk`, `Medium Risk`, `High Risk`, `Critical Risk`)
+* `investigation_status` (`Pending` for `High Risk` / `Critical Risk`; `Auto-Cleared` otherwise)
+
+---
+
+## 💻 How to Run Locally or in Colab
+
+```bash
+# 1. Build the hypertuned ML database (fraud_detection_hypertuned.db)
+python ml_models/prepare_hypertuned_db.py
+
+# 2. Run the 7-model benchmark & generate all comparison PNGs
+python ml_models/train_fraud_model.py
+```
+
+Or open `ml_models/Project_1_Python_Model_Training.ipynb` in **Google Colab**, upload `fraud_detection_hypertuned.db`, and run Cells 1–5 to reproduce the tuned XGBoost training, evaluation charts, and `powerbi_fraud_predictions.csv`.
+
